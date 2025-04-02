@@ -37,6 +37,10 @@ const char kPackageName[] = "xiaomi-keyboard";
 #define MSG_HEADER_1 0x31
 #define MSG_HEADER_2 0x38
 
+// Lock state message types
+#define MSG_TYPE_LOCK 41
+#define MSG_TYPE_UNLOCK 42
+
 // Device path
 // We'll find this dynamically
 char* EVENT_PATH = NULL;
@@ -177,14 +181,39 @@ void set_kb_state(bool value, bool force) {
     if (kb_status != value || force) {
         kb_status = value;
         LOGI("Setting keyboard state to: %d", value);
+        
+        // Add fd validation before attempting write
+        if (fd < 0) {
+            LOGE("Invalid file descriptor (fd=%d) when setting keyboard state", fd);
+            return;
+        }
+        
         unsigned char buf[3] = {0x32, 0xFF, (unsigned char)value};
-        if (write(fd, &buf, 3) != 3) {
-            LOGE("Failed to write keyboard state");
+        ssize_t bytes_written = write(fd, &buf, 3);
+        
+        if (bytes_written != 3) {
+            // Enhanced error logging with errno details
+            LOGE("Failed to write keyboard state: %s (errno=%d, written=%zd/3)", 
+                 strerror(errno), errno, bytes_written);
+            
+            // Log device status
+            struct stat st;
+            if (fstat(fd, &st) == 0) {
+                LOGI("Device status: mode=%o, size=%lld, uid=%d, gid=%d", 
+                     st.st_mode, (long long)st.st_size, st.st_uid, st.st_gid);
+            } else {
+                LOGE("Unable to stat device: %s", strerror(errno));
+            }
+        } else {
+            LOGI("Successfully wrote keyboard state: %d", value);
         }
     }
 }
 
 // Improved keyboard status monitoring with debouncing
+
+// Add this global variable to track device lock state
+bool device_is_locked = false;
 
 void *keyboard_monitor_thread(void *arg) {
     (void)arg;
@@ -213,11 +242,15 @@ void *keyboard_monitor_thread(void *arg) {
             last_monitor_activity = time(NULL);
             
             if (!kb_thread_paused) {
-                if (current_state && !kb_status) {
-                    LOGI("Keyboard connected - enabling");
+                // New logic: Enable only if connected AND not locked
+                if (current_state && !device_is_locked && !kb_status) {
+                    LOGI("Keyboard connected and device unlocked - enabling");
                     set_kb_state(true, false);
-                } else if (!current_state && kb_status) {
-                    LOGI("Keyboard disconnected - disabling");
+                } 
+                // Always disable if disconnected or if device becomes locked
+                else if ((!current_state || device_is_locked) && kb_status) {
+                    LOGI("Keyboard %s - disabling", 
+                         !current_state ? "disconnected" : "disabled due to device lock");
                     set_kb_state(false, false);
                 }
             }
@@ -291,14 +324,88 @@ void handle_power_event(char *buffer) {
         bool keyboard_connected = (access(EVENT_PATH, F_OK) != -1);
         LOGI("Wake: Keyboard %s", keyboard_connected ? "connected" : "disconnected");
         
-        if (keyboard_connected) {
+        // Only enable if the device is not locked and keyboard is connected
+        if (keyboard_connected && !device_is_locked) {
             set_kb_state(true, true);
         } else {
             kb_status = false;
+            LOGI("Not enabling keyboard on wake: %s", 
+                 device_is_locked ? "device is locked" : "keyboard not connected");
         }
     } else {
         LOGI("Received sleep event - pausing keyboard monitoring");
     }
+}
+
+void handle_lock_event(char *buffer) {
+    bool is_locked = (buffer[4] == MSG_TYPE_LOCK);
+    
+    // Add message validation logging
+    LOGI("Received lock event: %s (msg_type=%d)", 
+         is_locked ? "LOCK" : "UNLOCK", buffer[4]);
+    
+    // Log buffer contents for debugging
+    char hex_buffer[64] = {0};
+    for (int i = 0; i < 7 && i < 20; i++) {
+        sprintf(hex_buffer + (i*3), "%02X ", (unsigned char)buffer[i]);
+    }
+    LOGD("Lock message buffer: %s", hex_buffer);
+    
+    pthread_mutex_lock(&kb_mutex);
+    // Update global lock state
+    device_is_locked = is_locked;
+    
+    if (is_locked) {
+        LOGI("Lock event with current kb_status=%d", kb_status);
+        
+        if (kb_status) {
+            // Check device status before attempting to change state
+            if (fd >= 0) {
+                // Check if device is writable
+                int flags = fcntl(fd, F_GETFL);
+                if (flags != -1 && (flags & O_RDWR)) {
+                    LOGI("Device is opened with read-write access, attempting to disable keyboard");
+                    set_kb_state(false, true);
+                } else {
+                    LOGW("Device may not have write permissions (flags=%d)", flags);
+                    set_kb_state(false, true);  // Try anyway
+                }
+            } else {
+                LOGE("Invalid file descriptor when handling lock event (fd=%d)", fd);
+            }
+            
+            LOGI("Device locked - disabling keyboard");
+        } else {
+            LOGI("Device locked but keyboard already disabled");
+        }
+    } else {
+        // Restore previous state if keyboard is connected
+        LOGI("Unlock event, checking keyboard presence");
+        bool keyboard_present = (access(EVENT_PATH, F_OK) != -1);
+        LOGI("Keyboard %s on unlock", keyboard_present ? "present" : "not present");
+        
+        if (keyboard_present) {
+            // Same device check as above
+            if (fd >= 0) {
+                LOGI("Attempting to enable keyboard on unlock");
+                set_kb_state(true, true);
+            } else {
+                LOGE("Invalid file descriptor when handling unlock event (fd=%d)", fd);
+                
+                // Try to recover the file descriptor
+                fd = open(NANODEV_PATH, O_RDWR);
+                if (fd != -1) {
+                    LOGI("Reopened device file on unlock, attempting to enable keyboard");
+                    set_kb_state(true, true);
+                }
+            }
+            
+            LOGI("Device unlocked - re-enabling keyboard");
+        } else {
+            LOGW("Not enabling keyboard on unlock - device not present");
+        }
+    }
+    pthread_mutex_unlock(&kb_mutex);
 }
 
 /**
@@ -315,6 +422,8 @@ void handle_event(char *buffer, ssize_t bytes_read) {
         if (buffer[5] == 1) {
             handle_power_event(buffer);
         }
+    } else if (buffer[4] == MSG_TYPE_LOCK || buffer[4] == MSG_TYPE_UNLOCK) {
+        handle_lock_event(buffer);
     }
 }
 
@@ -327,19 +436,42 @@ int reconnect_device() {
     const int max_attempts = 5;  // Reduced from 10
     int new_fd = -1;
     
-    LOGI("Starting device reconnection procedure");
+    LOGI("Starting device reconnection procedure to %s", NANODEV_PATH);
+    
+    // Check if device exists
+    if (access(NANODEV_PATH, F_OK) != 0) {
+        LOGE("Device file %s does not exist: %s", NANODEV_PATH, strerror(errno));
+    } else {
+        LOGI("Device file exists, checking permissions");
+        // Check permissions
+        if (access(NANODEV_PATH, R_OK | W_OK) != 0) {
+            LOGE("Insufficient permissions for device: %s", strerror(errno));
+        } else {
+            LOGI("Device has read/write permissions");
+        }
+    }
     
     while (attempts < max_attempts && new_fd == -1 && !terminate) {
         LOGI("Reconnect attempt %d/%d", attempts + 1, max_attempts);
+        
+        // Log current process permissions
+        uid_t uid = getuid();
+        gid_t gid = getgid();
+        LOGI("Current process: uid=%d, gid=%d, euid=%d, egid=%d", 
+             uid, gid, geteuid(), getegid());
+        
         new_fd = open(NANODEV_PATH, O_RDWR);
         
         if (new_fd != -1) {
-            LOGI("Successfully reconnected to device");
+            LOGI("Successfully reconnected to device (fd=%d)", new_fd);
             return new_fd;
+        } else {
+            LOGE("Failed to open device: %s (errno=%d)", strerror(errno), errno);
         }
         
         // Simplified backoff: 1s, 2s, 4s, 4s, 4s
         int sleep_time = (attempts < 3) ? (1 << attempts) : 4;
+        LOGI("Sleeping for %d seconds before next attempt", sleep_time);
         sleep(sleep_time);
         attempts++;
     }
@@ -404,8 +536,28 @@ int main() {
     // Open the nanodev device file
     fd = open(NANODEV_PATH, O_RDWR);
     if (fd == -1) {
-        LOGE("Error opening nanodev device: %s", strerror(errno));
+        LOGE("Error opening nanodev device: %s (errno=%d)", strerror(errno), errno);
+        
+        // Add more diagnostic information
+        if (access(NANODEV_PATH, F_OK) != 0) {
+            LOGE("Device file %s does not exist!", NANODEV_PATH);
+        } else {
+            LOGE("Device exists but cannot be opened. Checking permissions...");
+            if (access(NANODEV_PATH, R_OK | W_OK) != 0) {
+                LOGE("Insufficient permissions for device %s", NANODEV_PATH);
+            }
+        }
+        
         return errno;
+    }
+    
+    LOGI("Successfully opened device file (fd=%d)", fd);
+    
+    // Get and log file status
+    struct stat st;
+    if (fstat(fd, &st) == 0) {
+        LOGI("Device file info: mode=%o, size=%lld, uid=%d, gid=%d", 
+             st.st_mode, (long long)st.st_size, st.st_uid, st.st_gid);
     }
 
     // Check current keyboard status
@@ -413,8 +565,14 @@ int main() {
         kb_status = false;
         LOGW("Keyboard input device not found, starting disabled");
     } else {
-        LOGI("Keyboard input device found, starting enabled");
-        set_kb_state(true, true);
+        // Only enable if the device is not locked
+        if (!device_is_locked) {
+            LOGI("Keyboard input device found and device unlocked, starting enabled");
+            set_kb_state(true, true);
+        } else {
+            LOGI("Keyboard input device found but device locked, starting disabled");
+            kb_status = false;
+        }
     }
 
     // Create the keyboard monitor thread
