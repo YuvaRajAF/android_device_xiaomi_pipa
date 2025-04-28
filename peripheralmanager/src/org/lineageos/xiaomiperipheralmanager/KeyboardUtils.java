@@ -49,6 +49,12 @@ public class KeyboardUtils {
     private static Context mContext = null;
     private static ScreenStateReceiver mScreenStateReceiver = null;
 
+    // Add watchdog monitor and recovery
+    private static final long WATCHDOG_TIMEOUT_MS = 10000; // 10 seconds
+    private static Thread mWatchdogThread = null;
+    private static volatile boolean mWatchdogRunning = false;
+    private static volatile long mLastWatchdogCheck = 0;
+
     /**
      * Initialize the keyboard utilities and set initial state
      * @param context Application context
@@ -61,10 +67,15 @@ public class KeyboardUtils {
             if (mInputManager == null) {
                 mInputManager = (InputManager) context.getSystemService(Context.INPUT_SERVICE);
             }
+            
+            // Force disable keyboard at startup for safety
             setKeyboardEnabled(false);
             
             // Register broadcast receiver for screen state changes
             registerScreenStateReceiver(context);
+            
+            // Start watchdog thread
+            startWatchdogThread();
             
         } catch (Exception e) {
             logError("Error setting up keyboard utils: " + e.getMessage());
@@ -90,6 +101,56 @@ public class KeyboardUtils {
     }
     
     /**
+     * Start watchdog thread to monitor and recover from stuck conditions
+     */
+    private static void startWatchdogThread() {
+        if (mWatchdogThread != null && mWatchdogThread.isAlive()) {
+            return; // Thread already running
+        }
+        
+        mWatchdogRunning = true;
+        mLastWatchdogCheck = System.currentTimeMillis();
+        
+        mWatchdogThread = new Thread(() -> {
+            logInfo("Keyboard watchdog thread started");
+            while (mWatchdogRunning) {
+                try {
+                    // Update watchdog timestamp
+                    mLastWatchdogCheck = System.currentTimeMillis();
+                    
+                    // Safety check: ensure keyboard is disabled in lock screen
+                    if (mIsDeviceLocked && mLastEnabledState) {
+                        logError("Watchdog detected keyboard enabled while locked! Forcing disable");
+                        setKeyboardEnabled(false);
+                    }
+                    
+                    Thread.sleep(5000); // Check every 5 seconds
+                } catch (InterruptedException e) {
+                    // Thread interrupted, continue loop
+                } catch (Exception e) {
+                    logError("Watchdog thread error: " + e.getMessage());
+                }
+            }
+            logInfo("Keyboard watchdog thread stopped");
+        });
+        
+        mWatchdogThread.setDaemon(true);
+        mWatchdogThread.setName("KeyboardWatchdog");
+        mWatchdogThread.start();
+    }
+    
+    /**
+     * Stop the watchdog thread during cleanup
+     */
+    private static void stopWatchdogThread() {
+        mWatchdogRunning = false;
+        if (mWatchdogThread != null) {
+            mWatchdogThread.interrupt();
+            mWatchdogThread = null;
+        }
+    }
+
+    /**
      * Unregister the screen state receiver when service is destroyed
      */
     public static void cleanup(Context context) {
@@ -101,6 +162,12 @@ public class KeyboardUtils {
                 logError("Error unregistering receiver: " + e.getMessage());
             }
         }
+        
+        // Stop watchdog thread
+        stopWatchdogThread();
+        
+        // Force disable keyboard on cleanup
+        setKeyboardEnabled(false);
     }
 
     /**
@@ -109,11 +176,14 @@ public class KeyboardUtils {
      * @return true if operation was successful, false otherwise
      */
     public static boolean setKeyboardEnabled(boolean enabled) {
-        // If the device is locked, don't enable the keyboard
+        // If the device is locked, never enable the keyboard
         if (enabled && mIsDeviceLocked) {
             logDebug("Not enabling keyboard because device is locked");
             return false;
         }
+        
+        // Update watchdog timestamp to show activity
+        mLastWatchdogCheck = System.currentTimeMillis();
         
         if (enabled == mLastEnabledState) {
             logDebug("Keyboard already in requested state: " + enabled);
@@ -122,6 +192,7 @@ public class KeyboardUtils {
         
         logInfo("Setting keyboard enabled: " + enabled);
         boolean success = false;
+        boolean deviceFound = false;
         
         try {
             if (mInputManager == null) {
@@ -129,18 +200,23 @@ public class KeyboardUtils {
                 return false;
             }
             
-            boolean deviceFound = false;
             for (int id : mInputManager.getInputDeviceIds()) {
                 if (isDeviceXiaomiKeyboard(id)) {
                     deviceFound = true;
                     logDebug("Found Xiaomi Keyboard with id: " + id);
-                    if (enabled) {
-                        mInputManager.enableInputDevice(id);
-                    } else {
-                        mInputManager.disableInputDevice(id);
+                    
+                    // Apply enable/disable with timeout protection
+                    try {
+                        if (enabled) {
+                            mInputManager.enableInputDevice(id);
+                        } else {
+                            mInputManager.disableInputDevice(id);
+                        }
+                        mLastEnabledState = enabled;
+                        success = true;
+                    } catch (Exception e) {
+                        logError("Failed to change keyboard state: " + e.getMessage());
                     }
-                    mLastEnabledState = enabled;
-                    success = true;
                 }
             }
             
@@ -162,11 +238,11 @@ public class KeyboardUtils {
         mIsDeviceLocked = isLocked;
         logInfo("Device lock state changed: " + (isLocked ? "LOCKED" : "UNLOCKED"));
         
-        // If locked, force disable the keyboard
-        if (isLocked && mLastEnabledState) {
+        // If locked, force disable the keyboard with higher priority
+        if (isLocked) {
             setKeyboardEnabled(false);
-        } else if (!isLocked && !mLastEnabledState) {
-            // Re-enable keyboard if it was disabled only because of lock
+        } else if (!mLastEnabledState) {
+            // Re-enable keyboard if unlocked and currently disabled
             setKeyboardEnabled(true);
         }
         
