@@ -38,47 +38,6 @@ done
 
 echo "[INFO] All repositories are set up!"
 
-# Define Clang directory
-CLANG_DIR="prebuilts/clang/host/linux-x86/zyc_clang"
-
-# Check if Clang is fully set up (not just the directory)
-if [ -d "$CLANG_DIR" ] && [ -f "$CLANG_DIR/bin/clang" ]; then
-    echo "ZyC Clang is already set up, skipping installation."
-else
-    echo "Setting up ZyC Clang..."
-
-    # Remove incomplete downloads if any
-    rm -rf "$CLANG_DIR"
-    mkdir -p "$CLANG_DIR"
-
-    # Get the latest release tarball URL from GitHub API
-    LATEST_RELEASE=$(curl -s https://api.github.com/repos/ZyCromerZ/Clang/releases/latest | grep "browser_download_url" | cut -d '"' -f 4 | grep "tar.gz")
-
-    if [ -z "$LATEST_RELEASE" ]; then
-        echo "Failed to fetch latest Clang release. Exiting..."
-        exit 1
-    fi
-
-    # Download and extract latest ZYC Clang
-    echo "Downloading latest Clang release..."
-    wget --progress=bar:force -O "$CLANG_DIR/clang.tar.gz" "$LATEST_RELEASE"
-
-    echo "Extracting Clang..."
-    tar -xvzf "$CLANG_DIR/clang.tar.gz" -C "$CLANG_DIR"
-
-    # Verify successful extraction
-    if [ -f "$CLANG_DIR/bin/clang" ]; then
-        echo "ZyC Clang setup complete!"
-    else
-        echo "Clang setup failed, cleaning up..."
-        rm -rf "$CLANG_DIR"
-        exit 1
-    fi
-
-    # Clean up tarball
-    rm "$CLANG_DIR/clang.tar.gz"
-fi
-
 # AOSP recovery screen fix
 ORIG_DIR=$(pwd)
 
