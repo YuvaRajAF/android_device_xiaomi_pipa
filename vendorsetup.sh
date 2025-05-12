@@ -6,6 +6,7 @@ declare -A REPOS=(
     ["vendor/xiaomi/pipa"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_pipa"
     ["vendor/xiaomi/sm8250-common"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_sm8250-common"
     ["kernel/xiaomi/sm8250"]="https://github.com/Matrixx-Devices/android_kernel_xiaomi_pipa"
+    ["hardware/dolby"]="https://github.com/Matrixx-Devices/hardware_dolby.git"
 )
 
 # Hardware/xiaomi (check if it's already crDroid)
