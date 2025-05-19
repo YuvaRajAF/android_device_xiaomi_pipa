@@ -26,6 +26,8 @@ TARGET_SCREEN_HEIGHT := 2880
 TARGET_SCREEN_WIDTH := 1800
 
 # Camera
+$(call inherit-product-if-exists, device/xiaomi/camera/miuicamera.mk)
+
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/camera/camera_cnf.txt:$(TARGET_COPY_OUT_VENDOR)/etc/camera/camera_cnf.txt
 
