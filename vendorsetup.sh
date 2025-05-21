@@ -3,6 +3,7 @@
 # Define repositories and their target directories
 declare -A REPOS=(
     ["device/xiaomi/sm8250-common"]="https://github.com/Matrixx-Devices/android_device_xiaomi_sm8250-common"
+    ["device/xiaomi/pipa-kernel"]="https://github.com/CuriousNom/android_device_xiaomi_pipa-kernel.git"
     ["vendor/xiaomi/pipa"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_pipa"
     ["vendor/xiaomi/sm8250-common"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_sm8250-common"
     ["kernel/xiaomi/sm8250"]="https://github.com/Matrixx-Devices/android_kernel_xiaomi_pipa"
