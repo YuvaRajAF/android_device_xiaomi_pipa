@@ -33,6 +33,9 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PACKAGES += \
     libpiex_shim
 
+# MiuiCamera
+-include device/xiaomi/camera/miuicamera.mk
+
 # Display
 PRODUCT_VENDOR_PROPERTIES += \
     debug.graphics.game_default_frame_rate.disabled=1 \
