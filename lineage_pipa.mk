@@ -24,6 +24,10 @@ BYPASS_CHARGE_SUPPORTED  := true
 # Inherit from pipa device
 $(call inherit-product, device/xiaomi/pipa/device.mk)
 
+# Inherit Camera-related flags
+TARGET_USES_MIUI_CAMERA := true
+TARGET_INCLUDES_MIUI_CAMERA := true
+
 PRODUCT_NAME := lineage_pipa
 PRODUCT_DEVICE := pipa
 PRODUCT_MANUFACTURER := Xiaomi
