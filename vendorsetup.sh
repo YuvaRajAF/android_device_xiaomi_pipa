@@ -3,6 +3,8 @@
 # Define repositories and their target directories
 declare -A REPOS=(
     ["device/xiaomi/sm8250-common"]="https://github.com/Matrixx-Devices/android_device_xiaomi_sm8250-common"
+    ["device/xiaomi/camera"]="https://github.com/CuriousNom/device_xiaomi_camera.git"
+    ["vendor/xiaomi/camera"]="https://gitlab.com/CuriousNom/vendor_xiaomi_camera.git"
     ["vendor/xiaomi/pipa"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_pipa"
     ["vendor/xiaomi/sm8250-common"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_sm8250-common"
     ["kernel/xiaomi/sm8250"]="https://github.com/Matrixx-Devices/android_kernel_xiaomi_pipa"
@@ -11,11 +13,16 @@ declare -A REPOS=(
 
 # Continue with other repos
 for DIR in "${!REPOS[@]}"; do
+    IFS='|' read -r REPO BRANCH <<< "${REPOS[$DIR]}"
     if [ -d "$DIR" ] && [ "$(ls -A "$DIR")" ]; then
         echo "[INFO] Skipping $DIR - already exists."
     else
-        echo "[INFO] Cloning ${REPOS[$DIR]} into $DIR..."
-        git clone --depth 1 "${REPOS[$DIR]}" "$DIR" || { echo "[ERROR] Failed to clone ${REPOS[$DIR]}"; exit 1; }
+        echo "[INFO] Cloning $REPO into $DIR..."
+        if [ -n "$BRANCH" ]; then
+            git clone --depth 1 -b "$BRANCH" "$REPO" "$DIR" || { echo "[ERROR] Failed to clone $REPO (branch: $BRANCH)"; exit 1; }
+        else
+            git clone --depth 1 "$REPO" "$DIR" || { echo "[ERROR] Failed to clone $REPO"; exit 1; }
+        fi
     fi
 done
 
