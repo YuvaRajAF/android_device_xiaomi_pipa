@@ -19,7 +19,7 @@ TARGET_BOARD_INFO_FILE := $(DEVICE_PATH)/board-info.txt
 TARGET_SCREEN_DENSITY := 400
 
 # Kernel
-TARGET_KERNEL_CONFIG += pipa_defconfig
+TARGET_KERNEL_CONFIG += pipa_defconfig vendor/xiaomi/magictime-common.config vendor/debugfs.config
 
 # Properties
 TARGET_SYSTEM_PROP += $(DEVICE_PATH)/system.prop
