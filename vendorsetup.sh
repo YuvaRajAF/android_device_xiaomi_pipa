@@ -2,11 +2,11 @@
 
 # Define repositories and their target directories
 declare -A REPOS=(
-    ["device/xiaomi/sm8250-common"]="https://github.com/Matrixx-Devices/android_device_xiaomi_sm8250-common"
-    ["device/xiaomi/camera"]="https://github.com/CuriousNom/device_xiaomi_camera.git"
-    ["vendor/xiaomi/camera"]="https://gitlab.com/CuriousNom/vendor_xiaomi_camera.git"
-    ["vendor/xiaomi/pipa"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_pipa"
-    ["vendor/xiaomi/sm8250-common"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_sm8250-common"
+    ["device/xiaomi/sm8250-common"]="https://github.com/Matrixx-Devices/android_device_xiaomi_sm8250-common|15.0"
+    ["device/xiaomi/camera"]="https://github.com/CuriousNom/device_xiaomi_camera.git|15.0"
+    ["vendor/xiaomi/camera"]="https://gitlab.com/CuriousNom/vendor_xiaomi_camera.git|15.0"
+    ["vendor/xiaomi/pipa"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_pipa|15.0"
+    ["vendor/xiaomi/sm8250-common"]="https://github.com/Matrixx-Devices/proprietary_vendor_xiaomi_sm8250-common|15.0"
     ["kernel/xiaomi/sm8250"]="https://github.com/CuriousNom/kernel_xiaomi_sm8250.git"
     ["hardware/dolby"]="https://github.com/Matrixx-Devices/hardware_dolby.git"
 )
