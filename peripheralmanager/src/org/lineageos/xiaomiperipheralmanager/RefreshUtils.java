@@ -7,49 +7,48 @@ import android.provider.Settings;
 public final class RefreshUtils {
     private static final String KEY_PEAK_REFRESH_RATE = "peak_refresh_rate";
     private static final String KEY_MIN_REFRESH_RATE = "min_refresh_rate";
-    private static final String KEY_PEN_MODE = "pen_mode";
-    private static final String PREF_FILE_NAME = "pen_refresh_prefs";
 
-    private Context mContext;
-    private SharedPreferences mSharedPrefs;
+    private static final String PREF_FILE_NAME = "pen_refresh_prefs";
+    private static final String PREF_ORIG_MIN = "orig_min_refresh_rate";
+    private static final String PREF_ORIG_PEAK = "orig_peak_refresh_rate";
+    private static final String PREF_PEN_MODE = "pen_mode";
+
+    private final Context mContext;
+    private final SharedPreferences mPrefs;
 
     protected RefreshUtils(Context context) {
-        mContext = context;
-        mSharedPrefs = context.getSharedPreferences(PREF_FILE_NAME, Context.MODE_PRIVATE);
+        mContext = context.getApplicationContext();
+        mPrefs = context.getSharedPreferences(PREF_FILE_NAME, Context.MODE_PRIVATE);
     }
 
     protected void setPenRefreshRate() {
-        boolean penMode = mSharedPrefs.getBoolean(KEY_PEN_MODE, false);
+        if (mPrefs.getBoolean(PREF_PEN_MODE, false)) return;
 
-        if (!penMode) {
-            float maxRate = Settings.System.getFloat(mContext.getContentResolver(), KEY_PEAK_REFRESH_RATE, 144f);
-            float minRate = Settings.System.getFloat(mContext.getContentResolver(), KEY_MIN_REFRESH_RATE, 144f);
+        float currentPeak = Settings.System.getFloat(mContext.getContentResolver(), KEY_PEAK_REFRESH_RATE, 144f);
+        float currentMin = Settings.System.getFloat(mContext.getContentResolver(), KEY_MIN_REFRESH_RATE, 60f);
 
-            // Update default values in SharedPreferences
-            mSharedPrefs.edit()
-                    .putFloat(KEY_MIN_REFRESH_RATE, minRate)
-                    .putFloat(KEY_PEAK_REFRESH_RATE, maxRate)
-                    .putBoolean(KEY_PEN_MODE, true)
-                    .apply();
+        // Only override if current peak is 144Hz (pen doesn't work at 144)
+        if (currentPeak == 144f) {
+            mPrefs.edit()
+                .putFloat(PREF_ORIG_MIN, currentMin)
+                .putFloat(PREF_ORIG_PEAK, currentPeak)
+                .putBoolean(PREF_PEN_MODE, true)
+                .apply();
 
-            // Ensure valid values for maxRate and minRate
-            maxRate = (maxRate != 60) ? 120 : maxRate;
-            minRate = (minRate <= 60) ? 60 : 120;
-
-            // Set the values in the Settings.System
-            Settings.System.putFloat(mContext.getContentResolver(), KEY_MIN_REFRESH_RATE, minRate);
-            Settings.System.putFloat(mContext.getContentResolver(), KEY_PEAK_REFRESH_RATE, maxRate);
+            Settings.System.putFloat(mContext.getContentResolver(), KEY_MIN_REFRESH_RATE, 120f);
+            Settings.System.putFloat(mContext.getContentResolver(), KEY_PEAK_REFRESH_RATE, 120f);
         }
     }
 
     protected void setDefaultRefreshRate() {
-        float defaultMinRate = mSharedPrefs.getFloat(KEY_MIN_REFRESH_RATE, 144f);
-        float defaultMaxRate = mSharedPrefs.getFloat(KEY_PEAK_REFRESH_RATE, 144f);
+        if (!mPrefs.getBoolean(PREF_PEN_MODE, false)) return;
 
-        mSharedPrefs.edit().putBoolean(KEY_PEN_MODE, false).apply();
+        float origMin = mPrefs.getFloat(PREF_ORIG_MIN, 60f);
+        float origPeak = mPrefs.getFloat(PREF_ORIG_PEAK, 144f);
 
-        // Set the values in the Settings.System directly
-        Settings.System.putFloat(mContext.getContentResolver(), KEY_MIN_REFRESH_RATE, defaultMinRate);
-        Settings.System.putFloat(mContext.getContentResolver(), KEY_PEAK_REFRESH_RATE, defaultMaxRate);
+        Settings.System.putFloat(mContext.getContentResolver(), KEY_MIN_REFRESH_RATE, origMin);
+        Settings.System.putFloat(mContext.getContentResolver(), KEY_PEAK_REFRESH_RATE, origPeak);
+
+        mPrefs.edit().putBoolean(PREF_PEN_MODE, false).apply();
     }
 }
