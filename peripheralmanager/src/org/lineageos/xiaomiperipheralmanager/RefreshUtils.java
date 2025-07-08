@@ -3,8 +3,11 @@ package org.lineageos.xiaomiperipheralmanager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.provider.Settings;
+import android.util.Log;
 
 public final class RefreshUtils {
+    private static final String TAG = "RefreshUtils";
+
     private static final String KEY_PEAK_REFRESH_RATE = "peak_refresh_rate";
     private static final String KEY_MIN_REFRESH_RATE = "min_refresh_rate";
 
@@ -18,17 +21,23 @@ public final class RefreshUtils {
 
     protected RefreshUtils(Context context) {
         mContext = context.getApplicationContext();
-        mPrefs = context.getSharedPreferences(PREF_FILE_NAME, Context.MODE_PRIVATE);
+        mPrefs = mContext.getSharedPreferences(PREF_FILE_NAME, Context.MODE_PRIVATE);
     }
 
     protected void setPenRefreshRate() {
-        if (mPrefs.getBoolean(PREF_PEN_MODE, false)) return;
+        if (mPrefs.getBoolean(PREF_PEN_MODE, false)) {
+            Log.d(TAG, "setPenRefreshRate: Pen mode already active. Skipping.");
+            return;
+        }
 
         float currentPeak = Settings.System.getFloat(mContext.getContentResolver(), KEY_PEAK_REFRESH_RATE, 144f);
         float currentMin = Settings.System.getFloat(mContext.getContentResolver(), KEY_MIN_REFRESH_RATE, 60f);
 
-        // Only override if current peak is 144Hz (pen doesn't work at 144)
-        if (currentPeak == 144f) {
+        Log.d(TAG, "setPenRefreshRate: Detected peak = " + currentPeak + ", min = " + currentMin);
+
+        if (Math.abs(currentPeak - 144f) < 1f) {
+            Log.d(TAG, "setPenRefreshRate: Switching to 120 Hz for pen compatibility.");
+
             mPrefs.edit()
                 .putFloat(PREF_ORIG_MIN, currentMin)
                 .putFloat(PREF_ORIG_PEAK, currentPeak)
@@ -37,14 +46,21 @@ public final class RefreshUtils {
 
             Settings.System.putFloat(mContext.getContentResolver(), KEY_MIN_REFRESH_RATE, 120f);
             Settings.System.putFloat(mContext.getContentResolver(), KEY_PEAK_REFRESH_RATE, 120f);
+        } else {
+            Log.d(TAG, "setPenRefreshRate: Current peak is not 144 Hz. No change needed.");
         }
     }
 
     protected void setDefaultRefreshRate() {
-        if (!mPrefs.getBoolean(PREF_PEN_MODE, false)) return;
+        if (!mPrefs.getBoolean(PREF_PEN_MODE, false)) {
+            Log.d(TAG, "setDefaultRefreshRate: Pen mode not active. Skipping.");
+            return;
+        }
 
         float origMin = mPrefs.getFloat(PREF_ORIG_MIN, 60f);
         float origPeak = mPrefs.getFloat(PREF_ORIG_PEAK, 144f);
+
+        Log.d(TAG, "setDefaultRefreshRate: Restoring to min = " + origMin + ", peak = " + origPeak);
 
         Settings.System.putFloat(mContext.getContentResolver(), KEY_MIN_REFRESH_RATE, origMin);
         Settings.System.putFloat(mContext.getContentResolver(), KEY_PEAK_REFRESH_RATE, origPeak);
