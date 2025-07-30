@@ -11,13 +11,18 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base.mk)
 # Inherit some common lineage stuff.
 $(call inherit-product, vendor/lineage/config/common_full_tablet_wifionly.mk)
 
-# Matrixx
-MATRIXX_BUILD_TYPE := Official
-MATRIXX_MAINTAINER := Aryan
-MATRIXX_CHIPSET := Snapdragon 870
-MATRIXX_BATTERY := 8840mAh
-MATRIXX_DISPLAY := 1800x2880
-WITH_GMS := true
+# Inherit keys
+$(call inherit-product, vendor/lineage-priv/keys/keys.mk)
+
+# Axion specific
+PRODUCT_NO_CAMERA := false
+AXION_CAMERA_REAR_INFO := 13
+AXION_CAMERA_FRONT_INFO := 8
+AXION_CPU_SMALL_CORES := 0,1,2,3
+AXION_CPU_BIG_CORES := 4,5,6,7
+AXION_MAINTAINER := Yuvaraj_(Atom_YR)
+AXION_PROCESSOR := Qualcomm_Snapdragon_870
+TARGET_PREBUILT_BCR := false
 TARGET_DISABLE_EPPE := true
 TARGET_SUPPORTS_WALLEFFECT := true
 BYPASS_CHARGE_SUPPORTED  := true
